@@ -1,17 +1,54 @@
+
 pipeline {
     agent any
 
+    environment {
+        AWS_REGION = 'ap-south-1'
+        INSTANCE_ID = 'i-03252ed8cef99290c'
+        IMAGE = 'kamesprabu/muse-app:latestv1'
+        CONTAINER = 'muse-app'
+        ALB_URL = 'http://muse-app-alb-312535184.ap-south-1.elb.amazonaws.com'
+    }
+
     stages {
-        stage('GitHub Connection Test') {
+        stage('Deploy Existing Docker Image') {
             steps {
-                echo 'Successfully connected GitHub repository to Jenkins!'
-                sh 'echo "Repository checkout successful"'
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-jenkins'
+                ]]) {
+                    sh '''
+                        set -e
+
+                        CMD_ID=$(aws ssm send-command \
+                          --region "$AWS_REGION" \
+                          --instance-ids "$INSTANCE_ID" \
+                          --document-name "AWS-RunShellScript" \
+                          --parameters 'commands=[
+                            "docker pull kamesprabu/muse-app:latestv1",
+                            "docker rm -f muse-app || true",
+                            "docker run -d --name muse-app --restart unless-stopped -p 80:80 kamesprabu/muse-app:latestv1"
+                          ]' \
+                          --query 'Command.CommandId' \
+                          --output text)
+
+                        echo "SSM Command ID: $CMD_ID"
+
+                        aws ssm wait command-executed \
+                          --region "$AWS_REGION" \
+                          --command-id "$CMD_ID" \
+                          --instance-id "$INSTANCE_ID"
+                    '''
+                }
             }
         }
 
-        stage('Build Test') {
+        stage('Application Health Check') {
             steps {
-                echo 'Jenkins pipeline is executing successfully!'
+                sh '''
+                    curl -fsS --retry 10 --retry-delay 5 \
+                      --retry-all-errors "$ALB_URL/health"
+                '''
             }
         }
     }
