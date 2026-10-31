@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -17,19 +16,19 @@ pipeline {
         stage('Build and Push Docker Image') {
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: 'ockerhub-creds',
+                    credentialsId: 'dockerhub-creds',
                     usernameVariable: 'DH_USER',
                     passwordVariable: 'DH_PASS'
                 )]) {
                     sh '''
                         set -e
+                        echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
 
                         docker buildx build \
                           --platform "$PLATFORM" \
                           -t "$IMAGE:$BUILD_NUMBER" \
                           -t "$IMAGE:latest" \
                           --push .
-
                     '''
                 }
             }
@@ -53,9 +52,7 @@ pipeline {
                             '''
                         } catch (e) {
                             echo 'Deployment or health check failed. Rolling back.'
-
                             deployTag(env.PREV_TAG)
-
                             error("Deployment failed. Rolled back to ${env.PREV_TAG}")
                         }
                     }
@@ -69,19 +66,19 @@ def deployTag(String tag) {
     sh """
         set -e
 
-        CMD_ID=\\$(aws ssm send-command \
-          --region ${env.AWS_REGION} \
-          --instance-ids ${env.INSTANCE_ID} \
-          --document-name AWS-RunShellScript \
-          --parameters 'commands=["docker pull ${env.IMAGE}:${tag}","docker rm -f ${env.CONTAINER} || true","docker run -d --name ${env.CONTAINER} --restart unless-stopped -p 80:80 ${env.IMAGE}:${tag}"]' \
-          --query Command.CommandId \
+        CMD_ID=\$(aws ssm send-command \\
+          --region ${env.AWS_REGION} \\
+          --instance-ids ${env.INSTANCE_ID} \\
+          --document-name AWS-RunShellScript \\
+          --parameters 'commands=["docker pull ${env.IMAGE}:${tag}","docker rm -f ${env.CONTAINER} || true","docker run -d --name ${env.CONTAINER} --restart unless-stopped -p 80:80 ${env.IMAGE}:${tag}"]' \\
+          --query Command.CommandId \\
           --output text)
 
-        echo "SSM Command ID: \\$CMD_ID"
+        echo "SSM Command ID: \$CMD_ID"
 
-        aws ssm wait command-executed \
-          --region ${env.AWS_REGION} \
-          --command-id \\$CMD_ID \
+        aws ssm wait command-executed \\
+          --region ${env.AWS_REGION} \\
+          --command-id \$CMD_ID \\
           --instance-id ${env.INSTANCE_ID}
     """
 }
