@@ -25,8 +25,8 @@ const tasks: Task[] = [
   { id: 1, minutes: 5, title: 'Warm-up Spoken Sprint', icon: Mic, color: 'pink' },
   { id: 2, minutes: 6, title: 'Speed Read & Shadowing', icon: RotateCcw, color: 'green' },
   { id: 3, minutes: 4, title: 'Master 1 Nuanced Word', icon: Sparkles, color: 'yellow' },
-  { id: 4, minutes: 5, title: 'Micro-Journal Quickwrite', icon: RotateCcw, color: 'hotpink', dark: true },
-  { id: 5, minutes: 8, title: 'Active Listening & Mimic', icon: Headphones, color: 'blue', dark: true },
+  { id: 4, minutes: 5, title: 'Micro-Journal Quickwrite', icon: RotateCcw, color: 'hotpink' },
+  { id: 5, minutes: 8, title: 'Active Listening & Mimic', icon: Headphones, color: 'blue' },
   { id: 6, minutes: 7, title: 'Real-World Mini Convo', icon: Volume2, color: 'cream' },
 ];
 
@@ -223,7 +223,28 @@ function App() {
 
         <section id="plan" className="scroll-mt-24 py-14 lg:py-20">
           <div className="mb-8 flex flex-col justify-between gap-5 md:flex-row md:items-end"><div><h2 className="section-title">Today's Plan</h2><p className="text-sm text-muted">35 focused minutes across 6 simple spoken rituals.</p></div><div className="w-full rounded-xl border-2 border-ink bg-white p-3 shadow-[4px_4px_0_#141414] md:w-72"><div className="mb-2 flex justify-between font-mono text-[10px] font-bold"><span>{completed.length} / 6 COMPLETED</span><span className="text-coral">{progress}%</span></div><div className="h-3 rounded-full border border-ink bg-beige p-0.5"><div className="h-full rounded-full bg-yellow transition-all" style={{ width: `${progress}%` }} /></div></div></div>
-          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">{tasks.map(({ id, minutes, title, icon: Icon, color, dark }) => { const done = completed.includes(id); return <article key={id} className={`task-card ${color} ${dark ? 'text-white' : ''} ${done ? 'opacity-60' : ''}`}><div className="flex items-start justify-between gap-4"><div><span className="font-mono text-[10px] font-bold uppercase">{minutes} mins</span><h3 className="mt-1 font-display text-lg font-bold leading-tight">{title}</h3></div><span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 border-ink bg-white text-ink shadow-[2px_2px_0_#141414]"><Icon size={21} /></span></div><button onClick={() => toggleTask(id)} className="mt-8 ml-auto flex items-center gap-2 rounded-full border-2 border-ink bg-white px-4 py-2 text-xs font-bold text-ink shadow-[2px_2px_0_#141414]">{done ? <Check size={15} /> : <Circle size={15} />}{done ? 'Done!' : 'Mark Done'}</button></article>; })}</div>
+          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+            {tasks.map(({ id, minutes, title, icon: Icon, color }) => {
+              const done = completed.includes(id);
+              return (
+                <article key={id} className={`task-card ${color} text-black ${done ? 'opacity-60' : ''}`}>
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <span className="font-mono text-[10px] font-bold uppercase text-black">{minutes} mins</span>
+                      <h3 className="mt-1 font-display text-lg font-bold leading-tight text-black">{title}</h3>
+                    </div>
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border-2 border-ink bg-white text-ink shadow-[2px_2px_0_#141414]">
+                      <Icon size={21} />
+                    </span>
+                  </div>
+                  <button onClick={() => toggleTask(id)} className="mt-8 ml-auto flex items-center gap-2 rounded-full border-2 border-ink bg-white px-4 py-2 text-xs font-bold text-ink shadow-[2px_2px_0_#141414]">
+                    {done ? <Check size={15} /> : <Circle size={15} />}
+                    {done ? 'Done!' : 'Mark Done'}
+                  </button>
+                </article>
+              );
+            })}
+          </div>
         </section>
 
         <section id="streak" className="grid scroll-mt-24 gap-10 py-14 lg:grid-cols-2 lg:py-20">

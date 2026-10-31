@@ -30,7 +30,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .tactile-button:hover, .pill-button:hover { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #141414; }
 .tactile-button:active, .pill-button:active { transform: translate(3px, 3px); box-shadow: none; }
 .pill-button { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 6px 13px; font-size: 12px; font-weight: 700; }
-.task-card { display: flex; min-height: 170px; flex-direction: column; justify-content: space-between; border: 2.5px solid #141414; border-radius: 16px; padding: 22px; box-shadow: 5px 5px 0 #141414; transition: transform .2s ease, opacity .2s ease; }
+.task-card { display: flex; min-height: 170px; flex-direction: column; justify-content: space-between; border: 2.5px solid #141414; border-radius: 16px; padding: 22px; box-shadow: 5px 5px 0 #141414; transition: transform .2s ease, opacity .2s ease; color: #000000; }
 .task-card:hover { transform: translateY(-3px); }
 .section-title { font-family: 'Bricolage Grotesque', sans-serif; font-size: 28px; line-height: 1.1; font-weight: 800; letter-spacing: -.02em; }
 @media (min-width: 768px) { .section-title { font-size: 30px; } }
