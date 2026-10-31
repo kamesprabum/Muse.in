@@ -65,7 +65,20 @@ pipeline {
                         } catch (e) {
                             echo 'Deployment or health check failed. Rolling back.'
                             deployTag(env.PREV_TAG)
-                            error("Deployment failed. Rolled back to ${env.PREV_TAG}")
+
+                            try {
+                                sh '''
+                                    curl -fsS --retry 10 \
+                                      --retry-delay 5 \
+                                      --retry-all-errors \
+                                      "$ALB_URL/health.html"
+                                '''
+                                echo "Rollback to ${env.PREV_TAG} verified — application is healthy."
+                            } catch (rollbackErr) {
+                                error("CRITICAL: Both deployment AND rollback verification failed. The application may be down. Rollback tag: ${env.PREV_TAG}")
+                            }
+
+                            error("Deployment failed. Rolled back successfully to ${env.PREV_TAG}")
                         }
                     }
                 }
