@@ -15,17 +15,29 @@ pipeline {
     stages {
         stage('Build and Push Docker Image') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'ockerhub-creds',
-                    usernameVariable: 'DH_USER',
-                    passwordVariable: 'DH_PASS'
-                )]) {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'ockerhub-creds',
+                        usernameVariable: 'DH_USER',
+                        passwordVariable: 'DH_PASS'
+                    ),
+                    string(
+                        credentialsId: 'supabase-url',
+                        variable: 'SUPABASE_URL'
+                    ),
+                    string(
+                        credentialsId: 'supabase-key',
+                        variable: 'SUPABASE_KEY'
+                    )
+                ]) {
                     sh '''
                         set -e
                         echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
 
                         docker buildx build \
                           --platform "$PLATFORM" \
+                          --build-arg VITE_SUPABASE_URL="$SUPABASE_URL" \
+                          --build-arg VITE_SUPABASE_ANON_KEY="$SUPABASE_KEY" \
                           -t "$IMAGE:$BUILD_NUMBER" \
                           -t "$IMAGE:latest" \
                           --push .
