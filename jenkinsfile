@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -5,48 +6,82 @@ pipeline {
         PATH = "/opt/homebrew/bin:/usr/local/bin:/Applications/Docker.app/Contents/Resources/bin:${env.PATH}"
         AWS_REGION = 'ap-south-1'
         INSTANCE_ID = 'i-03252ed8cef99290c'
-        IMAGE = 'kamesprabu/muse-app:latestv1'
+        IMAGE = 'kamesprabu/muse-app'
+        PREV_TAG = 'latestv1'
         CONTAINER = 'muse-app'
         ALB_URL = 'http://muse-app-alb-312535184.ap-south-1.elb.amazonaws.com'
+        PLATFORM = 'linux/arm64'
     }
 
     stages {
-        stage('Deploy Existing Docker Image') {
+        stage('Build and Push Docker Image') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-jenkins'
-                ]]) {
+                withCredentials([usernamePassword(
+                    credentialsId: 'ockerhub-creds',
+                    usernameVariable: 'DH_USER',
+                    passwordVariable: 'DH_PASS'
+                )]) {
                     sh '''
                         set -e
-                        which aws
 
-                        CMD_ID=$(aws ssm send-command \
-                          --region "$AWS_REGION" \
-                          --instance-ids "$INSTANCE_ID" \
-                          --document-name "AWS-RunShellScript" \
-                          --parameters "commands=[\\"docker pull $IMAGE\\",\\"docker rm -f $CONTAINER || true\\",\\"docker run -d --name $CONTAINER --restart unless-stopped -p 80:80 $IMAGE\\"]" \
-                          --query 'Command.CommandId' \
-                          --output text)
+                        docker buildx build \
+                          --platform "$PLATFORM" \
+                          -t "$IMAGE:$BUILD_NUMBER" \
+                          -t "$IMAGE:latest" \
+                          --push .
 
-                        echo "SSM Command ID: $CMD_ID"
-
-                        aws ssm wait command-executed \
-                          --region "$AWS_REGION" \
-                          --command-id "$CMD_ID" \
-                          --instance-id "$INSTANCE_ID"
                     '''
                 }
             }
         }
 
-        stage('Application Health Check') {
+        stage('Deploy and Verify') {
             steps {
-                sh '''
-                    curl -fsS --retry 10 --retry-delay 5 \
-                      --retry-all-errors "$ALB_URL/health.html"
-                '''
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-jenkins'
+                ]]) {
+                    script {
+                        try {
+                            deployTag(env.BUILD_NUMBER)
+
+                            sh '''
+                                curl -fsS --retry 10 \
+                                  --retry-delay 5 \
+                                  --retry-all-errors \
+                                  "$ALB_URL/health.html"
+                            '''
+                        } catch (e) {
+                            echo 'Deployment or health check failed. Rolling back.'
+
+                            deployTag(env.PREV_TAG)
+
+                            error("Deployment failed. Rolled back to ${env.PREV_TAG}")
+                        }
+                    }
+                }
             }
         }
     }
+}
+
+def deployTag(String tag) {
+    sh """
+        set -e
+
+        CMD_ID=\\$(aws ssm send-command \
+          --region ${env.AWS_REGION} \
+          --instance-ids ${env.INSTANCE_ID} \
+          --document-name AWS-RunShellScript \
+          --parameters 'commands=["docker pull ${env.IMAGE}:${tag}","docker rm -f ${env.CONTAINER} || true","docker run -d --name ${env.CONTAINER} --restart unless-stopped -p 80:80 ${env.IMAGE}:${tag}"]' \
+          --query Command.CommandId \
+          --output text)
+
+        echo "SSM Command ID: \\$CMD_ID"
+
+        aws ssm wait command-executed \
+          --region ${env.AWS_REGION} \
+          --command-id \\$CMD_ID \
+          --instance-id ${env.INSTANCE_ID}
+    """
 }
