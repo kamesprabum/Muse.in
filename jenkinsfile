@@ -56,9 +56,6 @@ pipeline {
                         try {
                             deployTag(env.BUILD_NUMBER)
 
-                            // TEMPORARY: Force failure to test rollback (remove after test)
-                            sh 'echo "Simulating deployment failure for rollback test" && exit 1'
-
                             sh '''
                                 curl -fsS --retry 10 \
                                   --retry-delay 5 \
