@@ -63,22 +63,24 @@ pipeline {
 }
 
 def deployTag(String tag) {
-    sh """
-        set -e
+    withEnv(["TAG=${tag}"]) {
+        sh '''
+            set -e
 
-        CMD_ID=\$(aws ssm send-command \\
-          --region ${env.AWS_REGION} \\
-          --instance-ids ${env.INSTANCE_ID} \\
-          --document-name AWS-RunShellScript \\
-          --parameters 'commands=["docker pull ${env.IMAGE}:${tag}","docker rm -f ${env.CONTAINER} || true","docker run -d --name ${env.CONTAINER} --restart unless-stopped -p 80:80 ${env.IMAGE}:${tag}"]' \\
-          --query Command.CommandId \\
-          --output text)
+            CMD_ID=$(aws ssm send-command \
+              --region "$AWS_REGION" \
+              --instance-ids "$INSTANCE_ID" \
+              --document-name AWS-RunShellScript \
+              --parameters "commands=[\\"docker pull $IMAGE:$TAG\\",\\"docker rm -f $CONTAINER || true\\",\\"docker run -d --name $CONTAINER --restart unless-stopped -p 80:80 $IMAGE:$TAG\\"]" \
+              --query Command.CommandId \
+              --output text)
 
-        echo "SSM Command ID: \$CMD_ID"
+            echo "SSM Command ID: $CMD_ID"
 
-        aws ssm wait command-executed \\
-          --region ${env.AWS_REGION} \\
-          --command-id \$CMD_ID \\
-          --instance-id ${env.INSTANCE_ID}
-    """
+            aws ssm wait command-executed \
+              --region "$AWS_REGION" \
+              --command-id "$CMD_ID" \
+              --instance-id "$INSTANCE_ID"
+        '''
+    }
 }
