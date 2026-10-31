@@ -92,6 +92,34 @@ pipeline {
                 }
             }
         }
+
+        stage('Deploy Monitoring') {
+            steps {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-jenkins'
+                ]]) {
+                    sh '''
+                        set -e
+                        COMPOSE=$(base64 < monitoring/docker-compose.yml | tr -d '\\n')
+                        PROM=$(base64 < monitoring/prometheus.yml | tr -d '\\n')
+
+                        CMD_ID=$(aws ssm send-command \
+                          --region "$AWS_REGION" \
+                          --instance-ids "$INSTANCE_ID" \
+                          --document-name AWS-RunShellScript \
+                          --parameters "commands=[\\"apt-get install -y docker-compose-v2\\",\\"mkdir -p /opt/monitoring\\",\\"echo $COMPOSE | base64 -d > /opt/monitoring/docker-compose.yml\\",\\"echo $PROM | base64 -d > /opt/monitoring/prometheus.yml\\",\\"cd /opt/monitoring && docker compose up -d\\"]" \
+                          --query Command.CommandId \
+                          --output text)
+
+                        aws ssm wait command-executed \
+                          --region "$AWS_REGION" \
+                          --command-id "$CMD_ID" \
+                          --instance-id "$INSTANCE_ID"
+                    '''
+                }
+            }
+        }
     }
 }
 
