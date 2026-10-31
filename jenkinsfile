@@ -6,7 +6,6 @@ pipeline {
         AWS_REGION = 'ap-south-1'
         INSTANCE_ID = 'i-03252ed8cef99290c'
         IMAGE = 'kamesprabu/muse-app'
-        PREV_TAG = 'latestv1'
         CONTAINER = 'muse-app'
         ALB_URL = 'http://muse-app-alb-312535184.ap-south-1.elb.amazonaws.com'
         PLATFORM = 'linux/arm64'
@@ -53,6 +52,15 @@ pipeline {
                     credentialsId: 'aws-jenkins'
                 ]]) {
                     script {
+                        // Capture the currently running image tag before deploying
+                        def prevTag = captureRunningTag()
+
+                        if (!prevTag) {
+                            error("Pre-deployment safety check failed: could not detect a valid running Docker image tag for ${env.IMAGE}. Deployment aborted to preserve rollback safety.")
+                        }
+
+                        echo "Previously running image tag: ${prevTag}"
+
                         try {
                             deployTag(env.BUILD_NUMBER)
 
@@ -63,8 +71,8 @@ pipeline {
                                   "$ALB_URL/health.html"
                             '''
                         } catch (e) {
-                            echo 'Deployment or health check failed. Rolling back.'
-                            deployTag(env.PREV_TAG)
+                            echo "Deployment or health check failed. Rolling back to: ${prevTag}"
+                            deployTag(prevTag)
 
                             try {
                                 sh '''
@@ -73,17 +81,96 @@ pipeline {
                                       --retry-all-errors \
                                       "$ALB_URL/health.html"
                                 '''
-                                echo "Rollback to ${env.PREV_TAG} verified — application is healthy."
+                                echo "Rollback to ${prevTag} verified — application is healthy."
                             } catch (rollbackErr) {
-                                error("CRITICAL: Both deployment AND rollback verification failed. The application may be down. Rollback tag: ${env.PREV_TAG}")
+                                error("CRITICAL: Both deployment AND rollback verification failed. The application may be down. Rollback tag: ${prevTag}")
                             }
 
-                            error("Deployment failed. Rolled back successfully to ${env.PREV_TAG}")
+                            error("Deployment failed. Rolled back successfully to ${prevTag}")
                         }
                     }
                 }
             }
         }
+    }
+}
+
+def captureRunningTag() {
+    try {
+        def cmdId = sh(
+            script: '''
+                aws ssm send-command \
+                  --region "$AWS_REGION" \
+                  --instance-ids "$INSTANCE_ID" \
+                  --document-name AWS-RunShellScript \
+                  --parameters 'commands=["docker inspect --format={{.Config.Image}} '"$CONTAINER"' 2>/dev/null || echo NONE"]' \
+                  --query Command.CommandId \
+                  --output text
+            ''',
+            returnStdout: true
+        ).trim()
+
+        sh """
+            aws ssm wait command-executed \
+              --region "\$AWS_REGION" \
+              --command-id "${cmdId}" \
+              --instance-id "\$INSTANCE_ID"
+        """
+
+        def status = sh(
+            script: """
+                aws ssm get-command-invocation \
+                  --region "\$AWS_REGION" \
+                  --command-id "${cmdId}" \
+                  --instance-id "\$INSTANCE_ID" \
+                  --query Status \
+                  --output text
+            """,
+            returnStdout: true
+        ).trim()
+
+        if (status != 'Success') {
+            def stderr = sh(
+                script: """
+                    aws ssm get-command-invocation \
+                      --region "\$AWS_REGION" \
+                      --command-id "${cmdId}" \
+                      --instance-id "\$INSTANCE_ID" \
+                      --query StandardErrorContent \
+                      --output text
+                """,
+                returnStdout: true
+            ).trim()
+            echo "SSM inspection failed with status: ${status}. Error: ${stderr}"
+            return null
+        }
+
+        def output = sh(
+            script: """
+                aws ssm get-command-invocation \
+                  --region "\$AWS_REGION" \
+                  --command-id "${cmdId}" \
+                  --instance-id "\$INSTANCE_ID" \
+                  --query StandardOutputContent \
+                  --output text
+            """,
+            returnStdout: true
+        ).trim()
+
+        // Validate output format: must be in the form of [registry/]kamesprabu/muse-app:<tag>
+        // and extract only the tag using strict regex
+        def matcher = (output =~ /(?:^|\/)${env.IMAGE}:([a-zA-Z0-9_][a-zA-Z0-9_.-]*)$/)
+        if (matcher.find()) {
+            def tag = matcher.group(1).trim()
+            echo "Detected valid running tag for ${env.IMAGE}: ${tag}"
+            return tag
+        }
+
+        echo "No running container with image ${env.IMAGE} found. Output was: ${output}"
+        return null
+    } catch (e) {
+        echo "Warning: Could not detect running image tag: ${e.message}"
+        return null
     }
 }
 
@@ -96,7 +183,7 @@ def deployTag(String tag) {
               --region "$AWS_REGION" \
               --instance-ids "$INSTANCE_ID" \
               --document-name AWS-RunShellScript \
-              --parameters "commands=[\\"docker pull $IMAGE:$TAG\\",\\"docker rm -f $CONTAINER || true\\",\\"docker run -d --name $CONTAINER --restart unless-stopped -p 80:80 $IMAGE:$TAG\\"]" \
+              --parameters "commands=[\\\"docker pull $IMAGE:$TAG\\\",\\\"docker rm -f $CONTAINER || true\\\",\\\"docker run -d --name $CONTAINER --restart unless-stopped -p 80:80 $IMAGE:$TAG\\\"]" \
               --query Command.CommandId \
               --output text)
 
@@ -105,7 +192,28 @@ def deployTag(String tag) {
             aws ssm wait command-executed \
               --region "$AWS_REGION" \
               --command-id "$CMD_ID" \
-              --instance-id "$INSTANCE_ID"
+              --instance-id "$INSTANCE_ID" || true
+
+            STATUS=$(aws ssm get-command-invocation \
+              --region "$AWS_REGION" \
+              --command-id "$CMD_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --query Status \
+              --output text)
+
+            echo "SSM Command Status: $STATUS"
+
+            if [ "$STATUS" != "Success" ]; then
+                echo "SSM command failed with status: $STATUS"
+                STDERR=$(aws ssm get-command-invocation \
+                  --region "$AWS_REGION" \
+                  --command-id "$CMD_ID" \
+                  --instance-id "$INSTANCE_ID" \
+                  --query StandardErrorContent \
+                  --output text)
+                echo "SSM StandardErrorContent: $STDERR"
+                exit 1
+            fi
         '''
     }
 }
