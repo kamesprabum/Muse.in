@@ -60,7 +60,7 @@ pipeline {
                                 curl -fsS --retry 10 \
                                   --retry-delay 5 \
                                   --retry-all-errors \
-                                  "$ALB_URL/health.html"
+                                  "$ALB_URL/does-not-exist-test-rollback"
                             '''
                         } catch (e) {
                             echo 'Deployment or health check failed. Rolling back.'
