@@ -1,8 +1,8 @@
-
 pipeline {
     agent any
 
     environment {
+        PATH = "/opt/homebrew/bin:/usr/local/bin:/Applications/Docker.app/Contents/Resources/bin:${env.PATH}"
         AWS_REGION = 'ap-south-1'
         INSTANCE_ID = 'i-03252ed8cef99290c'
         IMAGE = 'kamesprabu/muse-app:latestv1'
@@ -19,16 +19,13 @@ pipeline {
                 ]]) {
                     sh '''
                         set -e
+                        which aws
 
                         CMD_ID=$(aws ssm send-command \
                           --region "$AWS_REGION" \
                           --instance-ids "$INSTANCE_ID" \
                           --document-name "AWS-RunShellScript" \
-                          --parameters 'commands=[
-                            "docker pull kamesprabu/muse-app:latestv1",
-                            "docker rm -f muse-app || true",
-                            "docker run -d --name muse-app --restart unless-stopped -p 80:80 kamesprabu/muse-app:latestv1"
-                          ]' \
+                          --parameters "commands=[\\"docker pull $IMAGE\\",\\"docker rm -f $CONTAINER || true\\",\\"docker run -d --name $CONTAINER --restart unless-stopped -p 80:80 $IMAGE\\"]" \
                           --query 'Command.CommandId' \
                           --output text)
 
@@ -47,7 +44,7 @@ pipeline {
             steps {
                 sh '''
                     curl -fsS --retry 10 --retry-delay 5 \
-                      --retry-all-errors "$ALB_URL/health"
+                      --retry-all-errors "$ALB_URL/health.html"
                 '''
             }
         }
