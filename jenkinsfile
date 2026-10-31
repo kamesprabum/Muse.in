@@ -1,0 +1,18 @@
+pipeline {
+    agent any
+
+    stages {
+        stage('GitHub Connection Test') {
+            steps {
+                echo 'Successfully connected GitHub repository to Jenkins!'
+                sh 'echo "Repository checkout successful"'
+            }
+        }
+
+        stage('Build Test') {
+            steps {
+                echo 'Jenkins pipeline is executing successfully!'
+            }
+        }
+    }
+}
