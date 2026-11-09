@@ -7,7 +7,7 @@ pipeline {
         INSTANCE_ID = 'i-03252ed8cef99290c'
         IMAGE = 'kamesprabu/muse-app'
         CONTAINER = 'muse-app'
-        ALB_URL = 'http://muse-app-alb-312535184.ap-south-1.elb.amazonaws.com'
+        ALB_URL = 'http://muse-app-alb-2131442220.ap-south-1.elb.amazonaws.com'
         PLATFORM = 'linux/arm64'
     }
 
